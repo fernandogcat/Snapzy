@@ -27,22 +27,43 @@ final class UpdaterManager: NSObject, SPUUpdaterDelegate {
     controller.updater
   }
 
+  /// Local builds pass SNAPZY_DISABLE_UPDATER so Sparkle never replaces them with the official release.
+  #if SNAPZY_DISABLE_UPDATER
+  static let isDisabled = true
+  #else
+  static let isDisabled = false
+  #endif
+
   private override init() {
     super.init()
     controller = SPUStandardUpdaterController(
-      startingUpdater: true,
+      startingUpdater: !Self.isDisabled,
       updaterDelegate: self,
       userDriverDelegate: nil
     )
-    DiagnosticLogger.shared.log(.info, .update, "Updater initialized")
+    DiagnosticLogger.shared.log(.info, .update, Self.isDisabled ? "Updater disabled in this build" : "Updater initialized")
   }
 
   func checkForUpdates() {
+    guard !Self.isDisabled else {
+      DiagnosticLogger.shared.log(.info, .update, "Manual check for updates ignored: updater disabled in this build")
+      return
+    }
     DiagnosticLogger.shared.log(.info, .update, "Manual check for updates triggered")
     updater.checkForUpdates()
   }
 
   // MARK: - SPUUpdaterDelegate
+
+  func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
+    if Self.isDisabled {
+      throw NSError(
+        domain: "Snapzy.Updater",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Updates are disabled in this build"]
+      )
+    }
+  }
 
   func allowedChannels(for updater: SPUUpdater) -> Set<String> {
     let channel = Self.channel
